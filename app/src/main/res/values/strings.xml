@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Dita</string>
+    <string name="service_label">Dita — bolha de ditado</string>
+    <string name="service_description">Mostra uma bolha de microfone quando há um campo de texto em foco e insere nele o que você ditar. O áudio é enviado apenas para o servidor Whisper que você configurou. O Dita não lê nem guarda o conteúdo da tela.</string>
+</resources>
