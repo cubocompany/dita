@@ -7,7 +7,6 @@
   </defs>
   <g clip-path="url(#c)">
     <rect width="108" height="108" fill="url(#g)"/>
-    <path d="M32,49 L32,59 M42,41 L42,67 M52,33 L52,75 M62,43 L62,65" stroke="#F3F1EC" stroke-width="6.4" stroke-linecap="round" fill="none"/>
-    <path d="M75,37 L75,71 M71,35 L75,37 L79,35 M71,73 L75,71 L79,73" stroke="#8FD9B0" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+    <path d="M31.8,30.0 L31.8,78.0 M39.2,30.1 L39.2,77.9 M46.6,30.5 L46.6,77.5 M54.0,31.4 L54.0,76.6 M61.4,33.2 L61.4,74.8 M68.8,36.5 L68.8,71.5 M76.2,44.2 L76.2,63.8" stroke="#F3F1EC" stroke-width="4.7" stroke-linecap="round" fill="none"/>
   </g>
 </svg>
