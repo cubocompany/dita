@@ -8,6 +8,11 @@
 
     <queries>
         <package android:name="com.tailscale.ipn" />
+        <!-- lista de apps para "Ocultar a bolha em" -->
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
     </queries>
 
     <!-- usesCleartextTraffic: o endpoint é http:// dentro do túnel WireGuard do Tailscale. -->

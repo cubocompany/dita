@@ -43,6 +43,41 @@ class Prefs(ctx: Context) {
         get() = sp.getInt("bubbleLift", -1)
         set(v) = sp.edit().putInt("bubbleLift", v).apply()
 
+    /** Substituições de texto, uma por linha: `errado, outro errado = certo`. */
+    var replacements: String
+        get() = sp.getString("replacements", "") ?: ""
+        set(v) = sp.edit().putString("replacements", v.trim()).apply()
+
+    /** Servidor reserva: usado só quando o principal não responde. */
+    var fallbackEndpoint: String
+        get() = sp.getString("fbEndpoint", "") ?: ""
+        set(v) = sp.edit().putString("fbEndpoint", v.trim()).apply()
+    var fallbackKey: String
+        get() = sp.getString("fbKey", "") ?: ""
+        set(v) = sp.edit().putString("fbKey", v.trim()).apply()
+    var fallbackModel: String
+        get() = sp.getString("fbModel", "whisper-1") ?: "whisper-1"
+        set(v) = sp.edit().putString("fbModel", v.trim()).apply()
+
+    /** Limpeza por LLM (chat completions). Desligada por padrão. */
+    var llmEnabled: Boolean
+        get() = sp.getBoolean("llmOn", false)
+        set(v) = sp.edit().putBoolean("llmOn", v).apply()
+    var llmEndpoint: String
+        get() = sp.getString("llmEndpoint", "") ?: ""
+        set(v) = sp.edit().putString("llmEndpoint", v.trim()).apply()
+    var llmKey: String
+        get() = sp.getString("llmKey", "") ?: ""
+        set(v) = sp.edit().putString("llmKey", v.trim()).apply()
+    var llmModel: String
+        get() = sp.getString("llmModel", "") ?: ""
+        set(v) = sp.edit().putString("llmModel", v.trim()).apply()
+
+    /** Pacotes de apps onde a bolha não aparece. */
+    var hiddenApps: Set<String>
+        get() = sp.getStringSet("hiddenApps", emptySet()) ?: emptySet()
+        set(v) = sp.edit().putStringSet("hiddenApps", HashSet(v)).apply()
+
     /** Total de palavras já ditadas. */
     val words: Int get() = sp.getInt("words", 0)
 

@@ -4,7 +4,10 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- onda sonora de 5 barras -->
-    <path android:strokeColor="#8FD9B0" android:strokeWidth="6" android:strokeLineCap="round"
-        android:pathData="M36,49 L36,59 M45,42 L45,66 M54,34 L54,74 M63,42 L63,66 M72,49 L72,59" />
+    <!-- a voz: onda sonora -->
+    <path android:strokeColor="#F3F1EC" android:strokeWidth="6.4" android:strokeLineCap="round"
+        android:pathData="M32,49 L32,59 M42,41 L42,67 M52,33 L52,75 M62,43 L62,65" />
+    <!-- o texto: cursor de digitação -->
+    <path android:strokeColor="#8FD9B0" android:strokeWidth="3.6" android:strokeLineCap="round"
+        android:pathData="M75,37 L75,71 M71,35 L75,37 L79,35 M71,73 L75,71 L79,73" />
 </vector>

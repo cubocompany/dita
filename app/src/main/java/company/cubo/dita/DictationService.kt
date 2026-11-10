@@ -108,10 +108,20 @@ class DictationService : AccessibilityService(), BubbleView.Listener {
                 }
             }
         }
-        val editable = runCatching { findFocus(AccessibilityNodeInfo.FOCUS_INPUT)?.isEditable == true }
-            .getOrDefault(false)
+        val focus = runCatching { findFocus(AccessibilityNodeInfo.FOCUS_INPUT) }.getOrNull()
+        val editable = focus?.isEditable == true
+        val pkg = (focus?.packageName ?: runCatching { rootInActiveWindow?.packageName }.getOrNull())?.toString()
+        // Discrição: nada de bolha em campo de senha nem nos apps que o usuário escolheu.
+        val blocked = focus?.isPassword == true || (pkg != null && pkg in prefs.hiddenApps)
         imeTop = ime?.top ?: -1
-        if (ime != null || editable || state != BubbleView.IDLE) show() else hide()
+
+        // Um áudio guardado (envio que falhou) vira o estado "reenviar" assim que a bolha aparece.
+        val pending = Pending.exists(this)
+        if (state == BubbleView.IDLE && pending) setState(BubbleView.RETRY)
+        if (state == BubbleView.RETRY && !pending) setState(BubbleView.IDLE)
+
+        val working = state == BubbleView.RECORDING || state == BubbleView.BUSY
+        if (working || ((ime != null || editable) && !blocked)) show() else hide()
     }
 
     private fun screen(): Point {
@@ -178,10 +188,21 @@ class DictationService : AccessibilityService(), BubbleView.Listener {
             BubbleView.IDLE, BubbleView.ERROR -> startRecording()
             BubbleView.RECORDING -> finish()
             BubbleView.BUSY -> cancel()
+            BubbleView.RETRY -> {
+                val wav = Pending.load(this)
+                if (wav == null) { setState(BubbleView.IDLE); evaluateNow() } else send(wav)
+            }
         }
     }
 
-    override fun onCancelTap() = cancel()
+    override fun onCancelTap() {
+        if (state == BubbleView.RETRY) {
+            Pending.clear(this)
+            setState(BubbleView.IDLE)
+            toast("Áudio descartado")
+            evaluateNow()
+        } else cancel()
+    }
 
     override fun onHoldStart() {
         if (state == BubbleView.IDLE || state == BubbleView.ERROR) startRecording()
@@ -239,19 +260,29 @@ class DictationService : AccessibilityService(), BubbleView.Listener {
             evaluateNow()
             return
         }
+        send(res.wav)
+    }
+
+    /** Envia; se falhar, o áudio fica guardado e a bolha oferece reenviar. */
+    private fun send(wav: ByteArray) {
         setState(BubbleView.BUSY)
         val gen = ++generation
         io.execute {
-            val out = runCatching { WhisperClient.transcribe(prefs, res.wav) }
+            val out = runCatching { WhisperClient.process(prefs, wav) }
+            if (out.isFailure) Pending.save(this, wav) else Pending.clear(this)
             main.post {
                 if (gen != generation) return@post
                 out.fold(
                     onSuccess = {
                         setState(BubbleView.IDLE)
-                        if (it.isEmpty()) toast("Não ouvi nada") else insert(it)
+                        if (it.viaFallback) toast("Transcrito pelo servidor reserva")
+                        if (it.text.isEmpty()) toast("Não ouvi nada") else insert(it.text)
                         evaluateNow()
                     },
-                    onFailure = { fail(WhisperClient.explain(it)) }
+                    onFailure = {
+                        toast(WhisperClient.explain(it) + " O áudio ficou guardado.")
+                        setState(BubbleView.RETRY)
+                    }
                 )
             }
         }

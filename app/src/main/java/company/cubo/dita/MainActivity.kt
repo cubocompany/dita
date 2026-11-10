@@ -74,6 +74,7 @@ class MainActivity : Activity(), SharedPreferences.OnSharedPreferenceChangeListe
 
     private val recorder = Recorder { lvl -> main.post { wave.push(lvl) } }
     private var dictGen = 0
+    private var sending = false
     private var pingGen = 0
     private var serverState = TESTING
     private var serverMsg = "Testando…"
@@ -286,6 +287,26 @@ class MainActivity : Activity(), SharedPreferences.OnSharedPreferenceChangeListe
 
         val pending = all.filter { !it.ok }
         pendingBox.removeAllViews()
+        if (Pending.exists(this)) {
+            pendingBox.addView(section("Ditado guardado"), lp(top = 28))
+            val box = card(radius = 24, padV = 18)
+            box.addView(
+                text(
+                    if (sending) "Enviando…" else "Um ditado não chegou ao servidor. O áudio está guardado neste aparelho.",
+                    15.5f, Ui.TEXT
+                ).apply { setLineSpacing(0f, 1.25f) }
+            )
+            if (!sending) {
+                val line = LinearLayout(this)
+                line.addView(button("Tentar de novo", primary = true) { Pending.load(this)?.let { submit(it) } })
+                line.addView(
+                    button("Descartar", primary = false) { Pending.clear(this); refresh() },
+                    LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply { leftMargin = dp(10) }
+                )
+                box.addView(line, lp(top = 14))
+            }
+            pendingBox.addView(box, lp(top = 10))
+        }
         if (pending.isNotEmpty()) {
             pendingBox.addView(section(if (pending.size == 1) "Falta 1 passo" else "Faltam ${pending.size} passos"), lp(top = 28))
             val box = card(radius = 24, padV = 18)
@@ -466,22 +487,31 @@ class MainActivity : Activity(), SharedPreferences.OnSharedPreferenceChangeListe
         spinner.visibility = View.VISIBLE
         panelHint.text = ""
         panelCaption.text = "Transcrevendo\nem ${host()}"
+        submit(res.wav)
+    }
+
+    /** Envia para transcrever; se falhar, o áudio fica guardado e vira um cartão na tela inicial. */
+    private fun submit(wav: ByteArray) {
         val gen = ++dictGen
+        sending = true
+        refresh()
         io.execute {
-            val r = runCatching { WhisperClient.transcribe(prefs, res.wav) }
+            val r = runCatching { WhisperClient.process(prefs, wav) }
+            if (r.isFailure) Pending.save(this, wav) else Pending.clear(this)
             main.post {
-                if (gen != dictGen) return@post
-                showPanel(false)
-                r.fold(
+                sending = false
+                if (panel.visibility == View.VISIBLE) showPanel(false)
+                if (gen == dictGen) r.fold(
                     onSuccess = {
-                        if (it.isEmpty()) toast("Não ouvi nada") else {
-                            prefs.addHistory(it)
-                            copy(it)
-                            toast("Copiado")
+                        if (it.text.isEmpty()) toast("Não ouvi nada") else {
+                            prefs.addHistory(it.text)
+                            copy(it.text)
+                            toast(if (it.viaFallback) "Copiado · pelo servidor reserva" else "Copiado")
                         }
                     },
-                    onFailure = { toast(WhisperClient.explain(it)); ping() }
+                    onFailure = { toast(WhisperClient.explain(it) + " O áudio ficou guardado."); ping() }
                 )
+                refresh()
             }
         }
     }
@@ -527,6 +557,35 @@ class MainActivity : Activity(), SharedPreferences.OnSharedPreferenceChangeListe
         server.addView(field("Chave de API (opcional)", prefs.apiKey, "Só se o servidor exigir", secret = true) { prefs.apiKey = it }, lp(top = 18))
         col.addView(server, lp(top = 10))
 
+        col.addView(section("Servidor reserva"), lp(top = 28))
+        val fb = card(radius = 24, padV = 18)
+        fb.addView(note("Usado só quando o principal não responde. Se for um serviço na internet, o áudio sai do seu Tailscale. Deixe o endereço vazio para não usar."))
+        fb.addView(field("Endereço", prefs.fallbackEndpoint, "https://api.groq.com/openai/v1", uri = true) { prefs.fallbackEndpoint = it }, lp(top = 16))
+        fb.addView(field("Modelo", prefs.fallbackModel, "whisper-large-v3") { prefs.fallbackModel = it }, lp(top = 18))
+        fb.addView(field("Chave de API", prefs.fallbackKey, "Chave do serviço reserva", secret = true) { prefs.fallbackKey = it }, lp(top = 18))
+        col.addView(fb, lp(top = 10))
+
+        col.addView(section("Substituições"), lp(top = 28))
+        val rep = card(radius = 24, padV = 18)
+        rep.addView(field("Trocar palavras", prefs.replacements, "key hall, keyhole = keyhall", multi = true) { prefs.replacements = it })
+        rep.addView(note("Uma regra por linha: o que o Whisper escreve, um sinal de igual e o certo. Separe variações com vírgula."), lp(top = 8))
+        col.addView(rep, lp(top = 10))
+
+        col.addView(section("Limpeza por LLM"), lp(top = 28))
+        val llm = card(radius = 24, padV = 18)
+        llm.addView(Switch(this).apply {
+            text = "Limpar o texto depois de transcrever"
+            setTextColor(Ui.TEXT)
+            textSize = 16f
+            isChecked = prefs.llmEnabled
+            setOnCheckedChangeListener { _, on -> prefs.llmEnabled = on }
+        }, MATCH_PARENT, WRAP_CONTENT)
+        llm.addView(note("Opcional e desligada. Um modelo de chat compatível com a OpenAI tira “é…”, “tipo” e aplica as correções que você faz falando. Deixa o ditado um pouco mais lento."), lp(top = 8))
+        llm.addView(field("Endereço", prefs.llmEndpoint, "http://workstation:11434", uri = true) { prefs.llmEndpoint = it }, lp(top = 16))
+        llm.addView(field("Modelo", prefs.llmModel, "Nome do modelo de chat") { prefs.llmModel = it }, lp(top = 18))
+        llm.addView(field("Chave de API (opcional)", prefs.llmKey, "Só se o servidor exigir", secret = true) { prefs.llmKey = it }, lp(top = 18))
+        col.addView(llm, lp(top = 10))
+
         col.addView(section("Bolha"), lp(top = 28))
         val ins = card(radius = 24, padV = 18)
         ins.addView(Switch(this).apply {
@@ -545,6 +604,12 @@ class MainActivity : Activity(), SharedPreferences.OnSharedPreferenceChangeListe
         ins.addView(
             text("Toque na bolha para ditar e toque de novo para concluir. Ou segure, fale e solte. Arraste para mudar de lugar.", 14.5f, Ui.TEXT)
                 .apply { setLineSpacing(0f, 1.25f) }
+        )
+        ins.addView(divider(16))
+        ins.addView(note("A bolha nunca aparece em campos de senha. Você também pode escondê-la em apps específicos."))
+        ins.addView(
+            button("Ocultar em apps…", primary = false) { pickHiddenApps() },
+            LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply { topMargin = dp(14) }
         )
         ins.addView(
             button("Restaurar posição", primary = false) {
@@ -572,10 +637,38 @@ class MainActivity : Activity(), SharedPreferences.OnSharedPreferenceChangeListe
         }
     }
 
+    private fun pickHiddenApps() {
+        io.execute {
+            val pm = packageManager
+            val launcher = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+            val apps = pm.queryIntentActivities(launcher, 0)
+                .map { it.activityInfo.packageName to it.loadLabel(pm).toString() }
+                .distinctBy { it.first }
+                .filter { it.first != packageName }
+                .sortedBy { it.second.lowercase() }
+            main.post {
+                if (isFinishing) return@post
+                val chosen = HashSet(prefs.hiddenApps)
+                android.app.AlertDialog.Builder(this)
+                    .setTitle("Ocultar a bolha em")
+                    .setMultiChoiceItems(
+                        apps.map { it.second }.toTypedArray(),
+                        BooleanArray(apps.size) { apps[it].first in chosen }
+                    ) { _, i, on -> if (on) chosen.add(apps[i].first) else chosen.remove(apps[i].first) }
+                    .setPositiveButton("Pronto") { _, _ -> prefs.hiddenApps = chosen }
+                    .setNegativeButton("Cancelar", null)
+                    .show()
+            }
+        }
+    }
+
+    private fun note(s: String) = text(s, 13f, Ui.TEXT_DIM).apply { setLineSpacing(0f, 1.2f) }
+
     private fun showSettings(show: Boolean) {
         val ease = DecelerateInterpolator(1.8f)
         if (show) {
             settings.visibility = View.VISIBLE
+            settings.scrollTo(0, 0)
             settings.translationX = settings.width.toFloat().coerceAtLeast(300f * d)
             settings.animate().translationX(0f).setDuration(260).setInterpolator(ease).withEndAction(null).start()
         } else {

@@ -39,11 +39,12 @@ class BubbleView(ctx: Context) : View(ctx) {
 
     val heightPx: Int = (size + pad * 2).toInt()
     fun widthFor(state: Int): Int =
-        ((if (state == RECORDING) pillW else size) + pad * 2).toInt()
+        ((if (state == RECORDING || state == RETRY) pillW else size) + pad * 2).toInt()
 
     private val fill = Paint(Paint.ANTI_ALIAS_FLAG)
     private val stroke = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
     private val rect = RectF()
+    private val text = Paint(Paint.ANTI_ALIAS_FLAG)
     private val bars = FloatArray(BARS)
     private var morph = 0f              // 0 = círculo, 1 = pílula
     private var morphAnim: ValueAnimator? = null
@@ -53,7 +54,7 @@ class BubbleView(ctx: Context) : View(ctx) {
             if (field == v) return
             field = v
             morphAnim?.cancel()
-            if (v == RECORDING) {
+            if (v == RECORDING || v == RETRY) {
                 synchronized(bars) { bars.fill(0f) }
                 morph = 0f
                 morphAnim = ValueAnimator.ofFloat(0f, 1f).apply {
@@ -101,14 +102,14 @@ class BubbleView(ctx: Context) : View(ctx) {
         fill.clearShadowLayer()
 
         stroke.strokeWidth = 1.2f * d
-        stroke.color = if (state == ERROR) Ui.B_DANGER else Ui.B_OUTLINE
+        stroke.color = if (state == ERROR || state == RETRY) Ui.B_DANGER else Ui.B_OUTLINE
         c.drawRoundRect(rect, r, r, stroke)
 
         when (state) {
             IDLE -> drawMic(c, rect.centerX(), cy, Ui.B_ACCENT)
             ERROR -> drawMic(c, rect.centerX(), cy, Ui.B_DANGER)
             BUSY -> drawSpinner(c, rect.centerX(), cy)
-            RECORDING -> drawRecording(c, cy, r)
+            RECORDING, RETRY -> drawRecording(c, cy, r)
         }
     }
 
@@ -160,6 +161,21 @@ class BubbleView(ctx: Context) : View(ctx) {
         c.drawCircle(cxStop, cy, btn, fill)
         stroke.color = Ui.withAlpha(Ui.B_ON_ACCENT, a)
         stroke.strokeWidth = 2.1f * d
+        if (state == RETRY) {
+            // ↻ reenviar
+            val rr = 5.6f * d
+            rect.set(cxStop - rr, cy - rr, cxStop + rr, cy + rr)
+            c.drawArc(rect, -50f, 280f, false, stroke)
+            val ex = cxStop - 0.643f * rr
+            val ey = cy - 0.766f * rr
+            c.drawLine(ex, ey, ex - 0.2f * d, ey - 4.4f * d, stroke)
+            c.drawLine(ex, ey, ex - 4.4f * d, ey + 0.4f * d, stroke)
+            text.color = Ui.withAlpha(Ui.B_TEXT, a)
+            text.textSize = 14.5f * d
+            text.textAlign = Paint.Align.CENTER
+            c.drawText("Reenviar", (bodyLeft + bodyRight) / 2f, cy - (text.ascent() + text.descent()) / 2f, text)
+            return
+        }
         c.drawLine(cxStop - 5.2f * d, cy + 0.4f * d, cxStop - 1.4f * d, cy + 4.2f * d, stroke)
         c.drawLine(cxStop - 1.4f * d, cy + 4.2f * d, cxStop + 5.4f * d, cy - 3.8f * d, stroke)
 
@@ -221,7 +237,7 @@ class BubbleView(ctx: Context) : View(ctx) {
                     held -> listener?.onHoldEnd()
                     moved -> listener?.onDragEnd()
                     e.actionMasked == MotionEvent.ACTION_UP -> {
-                        if (state == RECORDING && e.x < pad + size) listener?.onCancelTap()
+                        if ((state == RECORDING || state == RETRY) && e.x < pad + size) listener?.onCancelTap()
                         else listener?.onTap()
                     }
                 }
@@ -235,6 +251,7 @@ class BubbleView(ctx: Context) : View(ctx) {
         const val RECORDING = 1
         const val BUSY = 2
         const val ERROR = 3
+        const val RETRY = 4
         private const val BARS = 15
         private const val HOLD_MS = 320L
     }
