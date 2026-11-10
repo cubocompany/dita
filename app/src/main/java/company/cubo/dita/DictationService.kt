@@ -109,7 +109,7 @@ class DictationService : AccessibilityService(), BubbleView.Listener {
             }
         }
         val focus = runCatching { findFocus(AccessibilityNodeInfo.FOCUS_INPUT) }.getOrNull()
-        val editable = focus?.isEditable == true
+        val editable = focus != null && editable(focus)
         val pkg = (focus?.packageName ?: runCatching { rootInActiveWindow?.packageName }.getOrNull())?.toString()
         // Discrição: nada de bolha em campo de senha nem nos apps que o usuário escolheu.
         val blocked = focus?.isPassword == true || (pkg != null && pkg in prefs.hiddenApps)
@@ -307,8 +307,8 @@ class DictationService : AccessibilityService(), BubbleView.Listener {
 
     private fun insert(text: String) {
         prefs.addHistory(text)
-        val node = runCatching { findFocus(AccessibilityNodeInfo.FOCUS_INPUT) }.getOrNull()
-        if (node == null || !node.isEditable) {
+        val node = target()
+        if (node == null) {
             copy(text)
             toast("Copiado — cole onde quiser")
             return
@@ -357,6 +357,32 @@ class DictationService : AccessibilityService(), BubbleView.Listener {
             copy(text)
             toast("Copiado — cole onde quiser")
         }
+    }
+
+    /**
+     * Apps feitos em Compose, Flutter ou React Native nem sempre marcam o campo como "editável".
+     * Vale como campo de texto o que se declara EditText ou aceita definir/colar texto.
+     */
+    private fun editable(n: AccessibilityNodeInfo): Boolean =
+        n.isEditable || n.className?.toString()?.endsWith("EditText") == true ||
+            n.actionList.any {
+                it.id == AccessibilityNodeInfo.ACTION_SET_TEXT || it.id == AccessibilityNodeInfo.ACTION_PASTE
+            }
+
+    /** O campo em foco; se o sistema não o apontar, procura na janela ativa. */
+    private fun target(): AccessibilityNodeInfo? {
+        runCatching { findFocus(AccessibilityNodeInfo.FOCUS_INPUT) }.getOrNull()
+            ?.takeIf { editable(it) }?.let { return it }
+        val root = runCatching { rootInActiveWindow }.getOrNull() ?: return null
+        val queue = ArrayDeque<AccessibilityNodeInfo>()
+        queue.add(root)
+        var seen = 0
+        while (queue.isNotEmpty() && seen++ < 4000) {
+            val n = queue.removeFirst()
+            if (n.isFocused && editable(n)) return n
+            for (i in 0 until n.childCount) n.getChild(i)?.let { queue.add(it) }
+        }
+        return null
     }
 
     private fun copy(text: String) {
