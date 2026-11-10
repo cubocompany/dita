@@ -30,6 +30,11 @@ Fale em qualquer app. O áudio vai do celular direto para o seu endpoint, normal
 <img src="docs/tela-settings.png" width="230" alt="Ajustes com o estado da conexão">
 </p>
 
+## Baixar
+
+O APK pronto fica em [Releases](https://github.com/cubocompany/dita/releases/latest).
+Baixe no celular, abra o arquivo e permita a instalação de apps dessa origem.
+
 ## Como usar
 
 1. Tenha um servidor Whisper acessível pelo celular. Com whisper.cpp:
@@ -38,7 +43,7 @@ Fale em qualquer app. O áudio vai do celular direto para o seu endpoint, normal
      -m ggml-large-v3.bin -l pt --inference-path /v1/audio/transcriptions
    ```
 2. Ligue o Tailscale no celular.
-3. Instale o Dita, abra os ajustes e informe o endereço, por exemplo `http://workstation:8178`.
+3. Instale o Dita (veja [Baixar](#baixar)), abra os ajustes e informe o endereço, por exemplo `http://workstation:8178`.
    O caminho `/v1/audio/transcriptions` é completado sozinho.
 4. Permita o microfone e ative **Dita — bolha de ditado** em Acessibilidade.
 
