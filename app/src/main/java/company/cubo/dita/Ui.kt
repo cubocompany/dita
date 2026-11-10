@@ -108,9 +108,9 @@ class Glyph(ctx: Context, private val kind: Int, color: Int) : View(ctx) {
                 c.drawCircle(9f * u, 16f * u, 2.9f * u, p)
             }
             WAVE -> {
-                // a marca: barras de onda sonora que desenham um D
-                p.strokeWidth = 2.3f * u
-                line(4.6f, 3.8f, 4.6f, 20.2f); line(8.3f, 3.9f, 8.3f, 20.1f); line(12.0f, 4.3f, 12.0f, 19.7f); line(15.7f, 5.3f, 15.7f, 18.7f); line(19.4f, 8.3f, 19.4f, 15.7f)
+                // a marca: quatro barras de onda sonora que desenham um D
+                p.strokeWidth = 2.6f * u
+                line(5.1f, 3.6f, 5.1f, 20.4f); line(9.7f, 3.9f, 9.7f, 20.1f); line(14.3f, 5.1f, 14.3f, 18.9f); line(18.9f, 8.4f, 18.9f, 15.6f)
             }
             MIC -> {
                 rect.set(9.5f * u, 4f * u, 14.5f * u, 14f * u)
