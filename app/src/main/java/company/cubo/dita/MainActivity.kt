@@ -8,7 +8,9 @@ import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
 import android.content.pm.PackageManager
+import android.content.res.ColorStateList
 import android.graphics.Typeface
+import android.graphics.drawable.RippleDrawable
 import android.graphics.drawable.ColorDrawable
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
@@ -17,6 +19,8 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.VibrationEffect
+import android.os.Vibrator
 import android.provider.Settings
 import android.text.Editable
 import android.text.InputType
@@ -121,6 +125,8 @@ class MainActivity : Activity(), SharedPreferences.OnSharedPreferenceChangeListe
         renderHistory()
         refresh()
         ping()
+        // o serviço pode levar um instante para conectar depois que o app abre
+        main.postDelayed({ refresh() }, 1500)
     }
 
     override fun onPause() {
@@ -220,8 +226,20 @@ class MainActivity : Activity(), SharedPreferences.OnSharedPreferenceChangeListe
             val item = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
                 setPadding(0, dp(16), 0, dp(14))
-                setOnClickListener { copy(e.text); toast("Copiado") }
-                setOnLongClickListener { prefs.removeHistory(e.time); toast("Apagado"); true }
+                // ondulação ao toque; ao apagar, o item fica vermelho e desliza para fora
+                background = RippleDrawable(
+                    ColorStateList.valueOf(Ui.withAlpha(Ui.TEXT, 0x26)), null, Ui.box(Ui.TEXT, 14f * d)
+                )
+                setOnClickListener { buzz(light = true); copy(e.text); toast("Copiado") }
+                setOnLongClickListener { v ->
+                    buzz(light = false)
+                    v.isEnabled = false
+                    v.background = Ui.box(Ui.withAlpha(Ui.DANGER, 0x33), 14f * d)
+                    v.animate().alpha(0f).translationX(-v.width * 0.35f).setDuration(260)
+                        .setInterpolator(DecelerateInterpolator(1.6f))
+                        .withEndAction { prefs.removeHistory(e.time); toast("Apagado") }.start()
+                    true
+                }
             }
             item.addView(text(e.text, 16.5f, Ui.TEXT).apply { setLineSpacing(0f, 1.25f) })
             val flags = DateUtils.FORMAT_SHOW_TIME or
@@ -244,7 +262,8 @@ class MainActivity : Activity(), SharedPreferences.OnSharedPreferenceChangeListe
         val vpn = vpnActive()
         val hasTs = packageManager.getLaunchIntentForPackage(TAILSCALE) != null
         val micOk = checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
-        val bubble = bubbleEnabled()
+        val bubbleOn = bubbleEnabled()
+        val bubble = bubbleOn && DictationService.running
         return listOf(
             Status(
                 "Tailscale",
@@ -266,11 +285,16 @@ class MainActivity : Activity(), SharedPreferences.OnSharedPreferenceChangeListe
             ) { requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), 1) },
             Status(
                 "Bolha em outros apps",
-                if (bubble) "Ativa. Aparece junto do teclado." else "Para ditar em qualquer app.",
-                if (bubble) Ui.ACCENT else Ui.WARN, bubble, "Ativar"
+                when {
+                    bubble -> "Ativa. Aparece junto do teclado."
+                    bubbleOn -> "Parada: o Dita foi encerrado. Desligue e ligue de novo."
+                    else -> "Para ditar em qualquer app."
+                },
+                if (bubble) Ui.ACCENT else if (bubbleOn) Ui.DANGER else Ui.WARN, bubble,
+                if (bubbleOn) "Reativar" else "Ativar"
             ) {
                 startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
-                toast("Ative “Dita — bolha de ditado”")
+                toast(if (bubbleOn) "Desligue e ligue “Dita — bolha de ditado”" else "Ative “Dita — bolha de ditado”")
             }
         )
     }
@@ -368,8 +392,8 @@ class MainActivity : Activity(), SharedPreferences.OnSharedPreferenceChangeListe
             ?.hasTransport(NetworkCapabilities.TRANSPORT_VPN) == true
     }
 
+    /** Ativada nas configurações do sistema (o serviço pode estar parado mesmo assim). */
     private fun bubbleEnabled(): Boolean {
-        if (DictationService.running) return true
         val list = Settings.Secure.getString(contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES).orEmpty()
         return list.contains("$packageName/")
     }
@@ -625,7 +649,7 @@ class MainActivity : Activity(), SharedPreferences.OnSharedPreferenceChangeListe
         val hist = card(radius = 24, padV = 18)
         hist.addView(text("Fica só neste aparelho, com no máximo 100 ditados.", 14.5f, Ui.TEXT).apply { setLineSpacing(0f, 1.25f) })
         hist.addView(
-            button("Limpar histórico", primary = false) { prefs.clearHistory(); toast("Histórico apagado") },
+            button("Limpar histórico", primary = false) { buzz(light = false); prefs.clearHistory(); toast("Histórico apagado") },
             LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply { topMargin = dp(14) }
         )
         col.addView(hist, lp(top = 10))
@@ -658,6 +682,22 @@ class MainActivity : Activity(), SharedPreferences.OnSharedPreferenceChangeListe
                     .setPositiveButton("Pronto") { _, _ -> prefs.hiddenApps = chosen }
                     .setNegativeButton("Cancelar", null)
                     .show()
+            }
+        }
+    }
+
+    /** Vibração curta própria: não depende da opção "vibrar ao tocar" do sistema. */
+    private fun buzz(light: Boolean) {
+        runCatching {
+            val v = getSystemService(Vibrator::class.java) ?: return
+            if (Build.VERSION.SDK_INT >= 29) {
+                v.vibrate(
+                    VibrationEffect.createPredefined(
+                        if (light) VibrationEffect.EFFECT_TICK else VibrationEffect.EFFECT_HEAVY_CLICK
+                    )
+                )
+            } else {
+                v.vibrate(VibrationEffect.createOneShot(if (light) 12L else 35L, VibrationEffect.DEFAULT_AMPLITUDE))
             }
         }
     }
